@@ -1,15 +1,92 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
     %% Keep this file updated so it matches your final implementation.
 
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +str owner_id
+        +str name
+        +str email
+        +list preferences
+        +add_pet(pet) void
+        +get_pets() list
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +str pet_id
+        +str name
+        +str species
+        +int age
+        +Owner owner
+        +add_task(task) void
+        +get_tasks() list
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +str description
+        +date due_date
+        +str status
+        +int duration_minutes
+        +Priority priority
+        +TaskCategory category
+        +complete() void
+        +is_due() bool
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class TaskCategory {
+        <<enumeration>>
+        FEEDING
+        CLEANING
+        QUALITY_TIME
+    }
+
+    class Feeding {
+        +str time
+        +str food_type
+        +str notes
+        +schedule() void
+        +get_summary() str
+    }
+
+    class Cleaning {
+        +str time
+        +bool bathing
+        +str grooming
+        +cleaning_pet() bool
+        +cleaning_pet_living_quarters() bool
+        +str notes
+        +schedule() void
+        +get_summary() str
+    }
+
+    class Pet_Quality_time {
+        +str time
+        +str exercise
+        +bool play_time_w_toys
+        +bool outing_with_pet
+        +schedule() void
+        +str notes
+        +get_summary() str
+    }
+
+    class Scheduler {
+        +int available_minutes
+        +build_schedule(owner, pet) list
+        +explain_plan(schedule) str
+    }
+
+    Task <|-- Feeding : extends
+    Task <|-- Cleaning : extends
+    Task <|-- Pet_Quality_time : extends
+    Pet "1" *-- "*" Task : has tasks
+    Owner "1" *-- "*" Pet : owns
+    Pet "*" --> "1" Owner : belongs to
+    Task ..> Priority : uses
+    Task ..> TaskCategory : uses
+    Scheduler ..> Owner : uses preferences
+    Scheduler ..> Task : schedules
