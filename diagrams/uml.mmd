@@ -8,6 +8,7 @@ classDiagram
         +list preferences
         +add_pet(pet) void
         +get_pets() list
+        +get_all_tasks() list
     }
 
     class Pet {
@@ -23,12 +24,18 @@ classDiagram
     class Task {
         +str description
         +date due_date
+        +str time
         +str status
         +int duration_minutes
         +Priority priority
         +TaskCategory category
+        +Frequency frequency
+        +datetime scheduled_at
+        +Pet pet
         +complete() void
         +is_due() bool
+        +is_overdue() bool
+        +schedule() void
     }
 
     class Priority {
@@ -45,39 +52,44 @@ classDiagram
         QUALITY_TIME
     }
 
+    class Frequency {
+        <<enumeration>>
+        ONCE
+        DAILY
+        WEEKLY
+        MONTHLY
+    }
+
     class Feeding {
-        +str time
         +str food_type
         +str notes
-        +schedule() void
         +get_summary() str
     }
 
     class Cleaning {
-        +str time
+        +bool clean_pet
+        +bool clean_living_quarters
+        +str notes
         +bool bathing
         +str grooming
+        +str quarters_detail
         +cleaning_pet() bool
         +cleaning_pet_living_quarters() bool
-        +str notes
-        +schedule() void
         +get_summary() str
     }
 
     class Pet_Quality_time {
-        +str time
         +str exercise
         +bool play_time_w_toys
         +bool outing_with_pet
-        +schedule() void
         +str notes
         +get_summary() str
     }
 
     class Scheduler {
         +int available_minutes
-        +build_schedule(owner, pet) list
-        +explain_plan(schedule) str
+        +build_schedule(owner) list
+        +explain_plan(schedule, owner) str
     }
 
     Task <|-- Feeding : extends
@@ -86,7 +98,9 @@ classDiagram
     Pet "1" *-- "*" Task : has tasks
     Owner "1" *-- "*" Pet : owns
     Pet "*" --> "1" Owner : belongs to
+    Task "*" --> "1" Pet : belongs to
     Task ..> Priority : uses
     Task ..> TaskCategory : uses
+    Task ..> Frequency : uses
     Scheduler ..> Owner : uses preferences
     Scheduler ..> Task : schedules
