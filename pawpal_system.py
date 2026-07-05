@@ -72,14 +72,17 @@ class Owner:
     pets: List["Pet"] = field(default_factory=list)
 
     def add_pet(self, pet: "Pet") -> None:
+        """Register a pet with this owner, ignoring duplicates by pet_id."""
         # Skip if this pet_id is already registered, so re-adding is a no-op.
         if not any(existing.pet_id == pet.pet_id for existing in self.pets):
             self.pets.append(pet)
 
     def get_pets(self) -> list:
+        """Return this owner's list of pets."""
         return self.pets
 
     def get_all_tasks(self) -> list:
+        """Return every task across all of this owner's pets, flattened into one list."""
         # Flatten every pet's tasks into one list, e.g. for Scheduler.build_schedule().
         return [task for pet in self.pets for task in pet.get_tasks()]
 
@@ -95,12 +98,14 @@ class Pet:
     owner: Optional["Owner"] = field(default=None, repr=False, compare=False)
 
     def add_task(self, task: "Task") -> None:
+        """Attach a task to this pet, linking it back via task.pet."""
         # Back-reference so a task always knows which pet it belongs to
         # (used by explain_plan() to label each line with the pet's name).
         task.pet = self
         self.tasks.append(task)
 
     def get_tasks(self) -> list:
+        """Return this pet's list of tasks."""
         return self.tasks
 
 
@@ -122,6 +127,7 @@ class Task:
     pet: Optional["Pet"] = field(default=None, init=False, repr=False, compare=False)
 
     def complete(self) -> None:
+        """Mark the task completed, rolling recurring tasks forward to their next due date."""
         self.status = "completed"
         # Recurring tasks roll forward to their next occurrence instead of
         # staying completed forever; ONCE tasks just stay completed.
@@ -135,14 +141,17 @@ class Task:
             self.status = "pending"
 
     def is_due(self) -> bool:
+        """Return True if the task's due date is today or earlier."""
         # Due today or earlier.
         return self.due_date <= date.today()
 
     def is_overdue(self) -> bool:
+        """Return True if the task's due date is strictly in the past."""
         # Strictly in the past (today doesn't count as overdue).
         return self.due_date < date.today()
 
     def schedule(self) -> None:
+        """Resolve the task's time-of-day period into a concrete datetime and mark it scheduled."""
         # Turn the free-text time period into a concrete datetime and mark
         # this task as scheduled.
         period = self.time.strip().lower()
@@ -159,7 +168,12 @@ class Feeding(Task):
     notes: str
 
     def get_summary(self) -> str:
-        return f"Feeding - Time: {self.time}, Priority: {self.priority.name}, Food Type: {self.food_type}, Notes: {self.notes} "
+        """Return the display label for this task type."""
+        return "Feeding"
+
+    def get_details(self) -> List[str]:
+        """Return the food type and notes as display lines."""
+        return [f"Food Type: {self.food_type}", f"Notes: {self.notes}"]
 
 
 # A cleaning task. Can cover the pet itself (bathing/grooming) and/or its
@@ -174,6 +188,7 @@ class Cleaning(Task):
     quarters_detail: Optional[str] = None
 
     def __post_init__(self) -> None:
+        """Validate that bathing/grooming/quarters_detail are only set when their flag is True."""
         # Enforce that pet-hygiene / quarters details are only set when the
         # matching clean_pet / clean_living_quarters flag says they apply.
         if not self.clean_pet and (self.bathing is not None or self.grooming is not None):
@@ -182,13 +197,20 @@ class Cleaning(Task):
             raise ValueError("quarters_detail can only be set when clean_living_quarters is True")
 
     def cleaning_pet(self) -> bool:
+        """Return True if this task covers cleaning the pet itself."""
         return self.clean_pet
 
     def cleaning_pet_living_quarters(self) -> bool:
+        """Return True if this task covers cleaning the pet's living quarters."""
         return self.clean_living_quarters
 
     def get_summary(self) -> str:
-         return f"Cleaning - Time: {self.time}, Priority: {self.priority.name}, Notes: {self.notes} "
+        """Return the display label for this task type."""
+        return "Cleaning"
+
+    def get_details(self) -> List[str]:
+        """Return the notes as a display line."""
+        return [f"Notes: {self.notes}"]
 
 
 # A bonding/enrichment task, e.g. playtime or an outing.
@@ -200,15 +222,22 @@ class Pet_Quality_time(Task):
     notes: str
 
     def get_summary(self) -> str:
-        return f"Pet Quality Time - Time: {self.time}, Priority: {self.priority.name}, Notes: {self.notes} "
+        """Return the display label for this task type."""
+        return "Pet Quality Time"
+
+    def get_details(self) -> List[str]:
+        """Return the notes as a display line."""
+        return [f"Notes: {self.notes}"]
 
 
 # Builds a daily task plan for an owner within a fixed time budget.
 class Scheduler:
     def __init__(self, available_minutes: int):
+        """Create a scheduler with a fixed daily time budget in minutes."""
         self.available_minutes = available_minutes
 
     def build_schedule(self, owner: "Owner") -> list:
+        """Greedily pick the owner's highest-ranked due/overdue tasks that fit the time budget."""
         # Gather not-yet-completed tasks across every pet the owner has,
         # split into "overdue" and "due today" groups.
         all_tasks = owner.get_all_tasks()
@@ -216,6 +245,7 @@ class Scheduler:
         overdue_candidates = [ task for task in all_tasks if task.status != "completed" and task.is_overdue()]
 
         def _sort_key(task: "Task", owner: "Owner") -> tuple:
+            """Rank a task by overdue status, then priority, then preferred-time match."""
             overdue_rank = 0 if task.is_overdue() else 1      # 0 sorts before 1 → overdue first
             priority_rank = -task.priority.value               # Priority is an IntEnum (HIGH=3) → negate so HIGH sorts first
             preference_rank = 0 if task.time in owner.preferences else 1  # preferred time period sorts first
@@ -239,18 +269,36 @@ class Scheduler:
                 schedule.append(candidate)
         return schedule
 
+    # Time slots are shown in this order when present; any other value
+    # (e.g. a custom slot) is appended afterwards in first-seen order.
+    _TIME_SLOT_ORDER = ["morning", "afternoon", "evening", "night"]
+
     def explain_plan(self, schedule: list, owner: "Owner") -> str:
-        # Build one human-readable line per scheduled task, explaining why
-        # it was chosen (overdue / priority / preference match).
-        lines = []
+        """Render a scheduled task list as a human-readable plan grouped by time slot."""
+        # Build a multi-line, human-readable block per scheduled task,
+        # grouped by time slot, explaining why each task was chosen
+        # (overdue / priority / preference match).
+        grouped: dict = {}
         for task in schedule:
-            reasons =[]
-            if task.is_overdue():
-                reasons.append("overdue")
-            reasons.append(f"{task.priority.name} priority")
-            if task.time in owner.preferences:
-                reasons.append(f"in your prefered {task.time} slot")
-            pet_label = f"[{task.pet.name}] " if task.pet else ""
-            line = f"{pet_label}{task.get_summary()} — scheduled because: {', '.join(reasons)}"
-            lines.append(line)
-        return "\n".join(lines)
+            grouped.setdefault(task.time, []).append(task)
+
+        slots = [slot for slot in self._TIME_SLOT_ORDER if slot in grouped]
+        slots += [slot for slot in grouped if slot not in slots]
+
+        sections = []
+        for slot in slots:
+            lines = [slot.upper(), "-" * len(slot)]
+            for task in grouped[slot]:
+                reasons = []
+                if task.is_overdue():
+                    reasons.append("overdue")
+                reasons.append(f"{task.priority.name} priority")
+                if task.time in owner.preferences:
+                    reasons.append(f"in your preferred {task.time} slot")
+                pet_label = f"[{task.pet.name}] " if task.pet else ""
+                lines.append(f"{pet_label}{task.get_summary()} ({task.priority.name})")
+                lines.extend(f"    {detail}" for detail in task.get_details())
+                lines.append(f"    Why: {', '.join(reasons)}")
+                lines.append("")
+            sections.append("\n".join(lines).rstrip())
+        return "\n\n".join(sections)

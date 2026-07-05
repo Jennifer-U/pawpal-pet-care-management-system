@@ -64,11 +64,28 @@ pytest
 pytest --cov
 ```
 
-Sample test output:
+Sample output:
 
-```
-# Paste your pytest output here
-```
+Today's Schedule
+
+MORNING
+-------
+[Biscuit] Feeding (HIGH)
+    Food Type: dry kibble
+    Notes: Half cup, fresh water too
+    Why: HIGH priority, in your preferred morning slot
+
+AFTERNOON
+---------
+[Luna] Cleaning (MEDIUM)
+    Notes: Scoop and refill litter
+    Why: MEDIUM priority
+
+EVENING
+-------
+[Biscuit] Pet Quality Time (LOW)
+    Notes: Backyard fetch session
+    Why: LOW priority, in your preferred evening slot
 
 ## 📐 Smarter Scheduling
 

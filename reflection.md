@@ -83,3 +83,5 @@ I would have to run the code and test it to see if it worked as expected. If it 
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+When creating the main it auto entered my name and email address for the owner. I had to delete that information and replace it with the made-up owner information. It was a reminder that it's important to review and verify the AI generated content to ensure personal info is not leaked.
