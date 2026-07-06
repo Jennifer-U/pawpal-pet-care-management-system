@@ -89,14 +89,12 @@ EVENING
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_by_time()` | Sorts tasks chronologically by their resolved time-of-day period (morning → afternoon → evening → night), using `PERIOD_TO_HOUR` as the sort key. Also applied to `build_schedule()`'s final result so the returned plan is always in time order. |
+| Filtering | `Scheduler.filter_tasks(tasks, status=None, pet_name=None)` | Filters a task list by completion status and/or owning pet's name (case-insensitive). Either filter, both, or neither can be supplied; supplying neither returns the input unchanged. |
+| Conflict handling | `Scheduler.build_schedule()`, `Scheduler.detect_conflicts()` | `build_schedule()` skips any candidate whose time window overlaps a task it already accepted — for the same pet *or* a different one, since the owner can only do one task at a time — and records what it skipped in `self.last_conflicts`. `detect_conflicts(tasks)` is a standalone method that finds every overlapping pair in an arbitrary task list, independent of the greedy scheduling algorithm. |
+| Recurring tasks | `Task.complete()`, `Task._next_due_date()` | Completing a `DAILY`/`WEEKLY`/`MONTHLY` task leaves it marked `"completed"` (a historical record) and creates + attaches a new `pending` `Task` for the next occurrence — due `+1 day`/`+1 week` via `timedelta`, or the calendar-aware `_add_one_month()` for monthly tasks (e.g. Jan 31 → Feb 28). `ONCE` tasks just complete, with no new task created. |
 
 ## 📸 Demo Walkthrough
 

@@ -194,7 +194,31 @@ if st.button("Generate schedule"):
     else:
         scheduler = Scheduler(available_minutes=int(available_minutes))
         schedule = scheduler.build_schedule(owner)
-        if not schedule:
-            st.info("No due/overdue tasks fit in the available time.")
-        else:
+
+        if schedule:
             st.text(scheduler.explain_plan(schedule, owner))
+        else:
+            st.warning("No tasks were scheduled — see why below.")
+
+        # Explain every task that didn't make it into the schedule, instead
+        # of just showing a generic "nothing fit" message.
+        scheduled_ids = {id(task) for task in schedule}
+        excluded = [task for task in owner.get_all_tasks() if id(task) not in scheduled_ids]
+        if excluded:
+            conflict_ids = {id(task) for task in scheduler.last_conflicts}
+            over_budget_ids = {id(task) for task in scheduler.last_skipped_over_budget}
+
+            st.markdown("**Not scheduled:**")
+            for task in excluded:
+                pet_label = f"[{task.pet.name}] " if task.pet else ""
+                if task.status == "completed":
+                    reason = "already completed"
+                elif id(task) in conflict_ids:
+                    reason = f"overlaps another already-scheduled {task.time} task"
+                elif id(task) in over_budget_ids:
+                    reason = "didn't fit in the available time budget"
+                elif not task.is_due():
+                    reason = f"not due yet — due {task.due_date.isoformat()}"
+                else:
+                    reason = "not scheduled"
+                st.markdown(f"- {pet_label}{task.get_summary()} \"{task.description}\" — excluded: {reason}")
