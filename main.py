@@ -17,7 +17,7 @@ def main() -> None:
     owner = Owner(
         owner_id="O1",
         name="Roy Moon",
-        email="RM@gmail.com",
+        email="example@example.com",
         preferences=["morning", "evening"],
     )
 
