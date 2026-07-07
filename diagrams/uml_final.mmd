@@ -1,0 +1,114 @@
+classDiagram
+    %% Keep this file updated so it matches your final implementation.
+
+    class Owner {
+        +str owner_id
+        +str name
+        +str email
+        +list preferences
+        +add_pet(pet) void
+        +get_pets() list
+        +get_all_tasks() list
+    }
+
+    class Pet {
+        +str pet_id
+        +str name
+        +str species
+        +int age
+        +Owner owner
+        +add_task(task) void
+        +get_tasks() list
+    }
+
+    class Task {
+        +str description
+        +date due_date
+        +str time
+        +str status
+        +int duration_minutes
+        +Priority priority
+        +TaskCategory category
+        +Frequency frequency
+        +datetime scheduled_at
+        +Pet pet
+        +datetime ends_at
+        +complete() void
+        +is_due() bool
+        +is_overdue() bool
+        +schedule() void
+        +get_summary() str
+        +get_details() list
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class TaskCategory {
+        <<enumeration>>
+        FEEDING
+        CLEANING
+        QUALITY_TIME
+    }
+
+    class Frequency {
+        <<enumeration>>
+        ONCE
+        DAILY
+        WEEKLY
+        MONTHLY
+    }
+
+    class Feeding {
+        +str food_type
+        +str notes
+    }
+
+    class Cleaning {
+        +bool clean_pet
+        +bool clean_living_quarters
+        +str notes
+        +bool bathing
+        +str grooming
+        +str quarters_detail
+        +cleaning_pet() bool
+        +cleaning_pet_living_quarters() bool
+    }
+
+    class Pet_Quality_time {
+        +str exercise
+        +bool play_time_w_toys
+        +bool outing_with_pet
+        +str notes
+    }
+
+    class Scheduler {
+        +int available_minutes
+        +list last_conflicts
+        +list last_skipped_over_budget
+        +build_schedule(owner) list
+        +explain_plan(schedule, owner) str
+        +sort_by_time(tasks) list
+        +filter_tasks(tasks, status, pet_name) list
+        +detect_conflicts(tasks) list
+    }
+
+    Task <|-- Feeding : extends
+    Task <|-- Cleaning : extends
+    Task <|-- Pet_Quality_time : extends
+    Pet "1" *-- "*" Task : has tasks
+    Owner "1" *-- "*" Pet : owns
+    Pet "*" --> "1" Owner : belongs to
+    Task "*" --> "1" Pet : belongs to
+    Task ..> Priority : uses
+    Task ..> TaskCategory : uses
+    Task ..> Frequency : uses
+    Scheduler ..> Owner : uses preferences
+    Scheduler ..> Task : schedules
+    Task "*" -- "*" Task : may conflict (time overlap)
+
+    note for Cleaning "clean_pet=False forbids bathing/grooming;\nclean_living_quarters=False forbids quarters_detail"

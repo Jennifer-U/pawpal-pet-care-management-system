@@ -164,19 +164,55 @@ else:
     all_tasks = owner.get_all_tasks()
     if all_tasks:
         st.write("Current tasks:")
-        st.table(
-            [
-                {
-                    "pet": task.pet.name if task.pet else "",
-                    "type": task.get_summary(),
-                    "title": task.description,
-                    "duration": task.duration_minutes,
-                    "priority": task.priority.name,
-                    "status": task.status,
-                }
-                for task in all_tasks
-            ]
+
+        # Filter and sort controls, backed by Scheduler.filter_tasks()/sort_by_time()
+        # rather than reimplementing that logic here.
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            status_filter = st.selectbox("Filter by status", ["All", "pending", "scheduled", "completed"])
+        with filter_col2:
+            pet_filter = st.selectbox("Filter by pet", ["All"] + list(pets_by_name.keys()))
+
+        display_scheduler = Scheduler(available_minutes=0)
+        filtered_tasks = display_scheduler.filter_tasks(
+            all_tasks,
+            status=None if status_filter == "All" else status_filter,
+            pet_name=None if pet_filter == "All" else pet_filter,
         )
+        sorted_tasks = display_scheduler.sort_by_time(filtered_tasks)
+
+        if sorted_tasks:
+            st.table(
+                [
+                    {
+                        "time": task.time,
+                        "pet": task.pet.name if task.pet else "",
+                        "type": task.get_summary(),
+                        "title": task.description,
+                        "duration": task.duration_minutes,
+                        "priority": task.priority.name,
+                        "status": task.status,
+                    }
+                    for task in sorted_tasks
+                ]
+            )
+        else:
+            st.info("No tasks match the selected filters.")
+
+        # Surface time conflicts as soon as they exist, without requiring the
+        # owner to click "Generate schedule" first.
+        conflicts = display_scheduler.detect_conflicts(sorted_tasks)
+        if conflicts:
+            for task_a, task_b in conflicts:
+                label_a = f"[{task_a.pet.name}] " if task_a.pet else ""
+                label_b = f"[{task_b.pet.name}] " if task_b.pet else ""
+                st.warning(
+                    f"⏰ Time conflict: {label_a}{task_a.get_summary()} \"{task_a.description}\" "
+                    f"overlaps {label_b}{task_b.get_summary()} \"{task_b.description}\" "
+                    f"(both {task_a.time})."
+                )
+        elif sorted_tasks:
+            st.success("No time conflicts detected among the tasks shown.")
     else:
         st.info("No tasks yet. Add one above.")
 
@@ -193,32 +229,62 @@ if st.button("Generate schedule"):
         st.warning("Add at least one task before generating a schedule.")
     else:
         scheduler = Scheduler(available_minutes=int(available_minutes))
-        schedule = scheduler.build_schedule(owner)
+        schedule = scheduler.build_schedule(owner)  # already chronologically sorted via sort_by_time()
 
         if schedule:
-            st.text(scheduler.explain_plan(schedule, owner))
+            st.success(f"✅ Scheduled {len(schedule)} task(s) within your {available_minutes}-minute budget.")
+            st.table(
+                [
+                    {
+                        "time": task.time,
+                        "pet": task.pet.name if task.pet else "",
+                        "type": task.get_summary(),
+                        "title": task.description,
+                        "duration": task.duration_minutes,
+                        "priority": task.priority.name,
+                    }
+                    for task in schedule
+                ]
+            )
+            with st.expander("Why this plan?"):
+                st.text(scheduler.explain_plan(schedule, owner))
         else:
             st.warning("No tasks were scheduled — see why below.")
 
-        # Explain every task that didn't make it into the schedule, instead
-        # of just showing a generic "nothing fit" message.
-        scheduled_ids = {id(task) for task in schedule}
-        excluded = [task for task in owner.get_all_tasks() if id(task) not in scheduled_ids]
-        if excluded:
-            conflict_ids = {id(task) for task in scheduler.last_conflicts}
-            over_budget_ids = {id(task) for task in scheduler.last_skipped_over_budget}
-
-            st.markdown("**Not scheduled:**")
-            for task in excluded:
+        # Flag skipped-for-conflict tasks front and center: a pet owner needs
+        # to know their pets can't both be cared for in the same time slot.
+        if scheduler.last_conflicts:
+            st.warning(f"⏰ {len(scheduler.last_conflicts)} task(s) skipped due to a time conflict:")
+            for task in scheduler.last_conflicts:
                 pet_label = f"[{task.pet.name}] " if task.pet else ""
-                if task.status == "completed":
-                    reason = "already completed"
-                elif id(task) in conflict_ids:
-                    reason = f"overlaps another already-scheduled {task.time} task"
-                elif id(task) in over_budget_ids:
-                    reason = "didn't fit in the available time budget"
-                elif not task.is_due():
-                    reason = f"not due yet — due {task.due_date.isoformat()}"
-                else:
-                    reason = "not scheduled"
-                st.markdown(f"- {pet_label}{task.get_summary()} \"{task.description}\" — excluded: {reason}")
+                st.markdown(
+                    f"- {pet_label}{task.get_summary()} \"{task.description}\" "
+                    f"overlaps another already-scheduled {task.time} task"
+                )
+
+        if scheduler.last_skipped_over_budget:
+            st.info(f"⌛ {len(scheduler.last_skipped_over_budget)} task(s) didn't fit in today's time budget:")
+            for task in scheduler.last_skipped_over_budget:
+                pet_label = f"[{task.pet.name}] " if task.pet else ""
+                st.markdown(f"- {pet_label}{task.get_summary()} \"{task.description}\" ({task.duration_minutes} min)")
+
+        # Anything excluded for a reason other than conflict/budget (already
+        # completed, or not due yet).
+        scheduled_ids = {id(task) for task in schedule}
+        conflict_ids = {id(task) for task in scheduler.last_conflicts}
+        over_budget_ids = {id(task) for task in scheduler.last_skipped_over_budget}
+        other_excluded = [
+            task
+            for task in owner.get_all_tasks()
+            if id(task) not in scheduled_ids and id(task) not in conflict_ids and id(task) not in over_budget_ids
+        ]
+        if other_excluded:
+            st.markdown("**Also not scheduled:**")
+            for task in other_excluded:
+                pet_label = f"[{task.pet.name}] " if task.pet else ""
+                reason = (
+                    "already completed"
+                    if task.status == "completed"
+                    else f"not due yet — due {task.due_date.isoformat()}"
+                )
+                st.markdown(f"- {pet_label}{task.get_summary()} \"{task.description}\" — {reason}")

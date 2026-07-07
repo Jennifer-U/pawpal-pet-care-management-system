@@ -87,6 +87,17 @@ EVENING
     Notes: Backyard fetch session
     Why: LOW priority, in your preferred evening slot
 
+## ✨ Features
+
+- **Multi-pet task tracking** — an `Owner` can register multiple `Pet`s, each with its own list of care tasks (`Feeding`, `Cleaning`, `Pet_Quality_time`), so a household with a dog and a cat is scheduled together, not separately.
+- **Sorting by time** — tasks are ordered chronologically by time-of-day period (morning → afternoon → evening → night), with stable ordering for tasks in the same slot.
+- **Priority- and preference-aware scheduling** — when building a day's plan, overdue tasks are always scheduled first, then tasks are ranked by priority (high → low), then by whether they fall in one of the owner's preferred time-of-day slots.
+- **Budget-based schedule building** — `build_schedule()` greedily fills a fixed daily time budget (in minutes), skipping any task that would exceed the remaining time and recording it separately from conflicts.
+- **Conflict warnings** — overlapping tasks (same pet or different pets — the owner can only do one task at a time) are detected and flagged rather than double-booked; both the Streamlit UI and the CLI surface these as explicit warnings.
+- **Daily/weekly/monthly recurrence** — completing a recurring task automatically generates its next occurrence (+1 day, +1 week, or +1 calendar month), with month-end dates correctly clamped (e.g. Jan 31 → Feb 28, or Feb 29 in a leap year). `ONCE` tasks don't recur.
+- **Explainable plans** — `explain_plan()` renders the schedule grouped by time slot, with a "Why" line per task (overdue, priority level, preferred-slot match) so the reasoning behind the plan is visible, not just the result.
+- **Filtering** — tasks can be filtered by status (pending/scheduled/completed) and/or by pet name (case-insensitive), independently or together.
+
 ## 📐 Smarter Scheduling
 
 | Feature | Method(s) | Notes |
@@ -98,15 +109,87 @@ EVENING
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### Main UI features
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+The Streamlit app (`app.py`) is organized into three panels:
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+- **Owner & Pets** — enter the owner's name, then add one or more pets (name, species, age). Pets are registered via `Owner.add_pet()` and shown in a table.
+- **Tasks** — pick a pet and a task category (Feeding, Cleaning, or Quality Time). Each category reveals its own fields (e.g. food type for Feeding; clean-pet/clean-quarters checkboxes for Cleaning; exercise/toys/outing checkboxes for Quality Time), plus the shared fields every task has: title, duration, priority, time-of-day, frequency, and due date. Added tasks appear in a live table that can be filtered by status and by pet, and is always shown in chronological order. Any overlapping tasks are flagged with a warning as soon as they're added — no need to build the schedule first.
+- **Build Schedule** — set the day's available time budget (in minutes) and click "Generate schedule" to run the scheduler. The resulting plan is shown as a table, with an expandable "Why this plan?" section explaining each choice, plus separate call-outs for tasks skipped due to a time conflict, tasks that didn't fit the budget, and tasks excluded for other reasons (already completed, or not yet due).
+
+### Example workflow
+
+1. **Add a pet** — enter "Biscuit" (dog, age 4) and click "Add pet."
+2. **Schedule a task** — select Biscuit, choose "Feeding," fill in "Breakfast" (15 min, high priority, morning, daily), and click "Add task." Add a second task, e.g. "Evening playtime" (Quality Time, 20 min, low priority, evening, daily).
+3. **View today's schedule** — the current-tasks table already shows both tasks sorted by time-of-day. Set an available-minutes budget and click "Generate schedule" to see which tasks were accepted, in what order, and why — including any that were skipped for a time conflict or for not fitting the budget.
+
+### Key Scheduler behaviors shown
+
+- **Sorting** — tasks always display in morning → afternoon → evening → night order, regardless of the order they were added in.
+- **Conflict warnings** — two tasks with overlapping time windows (e.g. two morning tasks for the same pet) are flagged instead of silently double-booked.
+- **Priority + overdue ranking** — when the time budget is tight, overdue tasks are scheduled first, then higher-priority tasks, then tasks in the owner's preferred time slots.
+- **Recurrence** — completing a daily/weekly/monthly task automatically creates its next occurrence with the correct future due date.
+
+### Sample CLI output
+
+Running `python main.py` builds a schedule for two pets (a dog and a cat), demonstrates conflict detection, sorting, filtering, and recurrence:
+
+```
+Today's Schedule
+
+MORNING
+-------
+[Biscuit] Feeding (HIGH)
+    Food Type: dry kibble
+    Notes: Half cup, fresh water too
+    Why: HIGH priority, in your preferred morning slot
+
+AFTERNOON
+---------
+[Luna] Cleaning (MEDIUM)
+    Notes: Scoop and refill litter
+    Why: MEDIUM priority
+
+EVENING
+-------
+[Biscuit] Pet Quality Time (LOW)
+    Notes: Backyard fetch session
+    Why: LOW priority, in your preferred evening slot
+
+SKIPPED (TIME CONFLICT)
+-----------------------
+[Biscuit] Feeding (HIGH) overlaps another already-scheduled morning task
+
+
+All Tasks Sorted By Time
+
+morning    [Biscuit] Feeding (scheduled)
+morning    [Biscuit] Feeding (pending)
+afternoon  [Luna] Cleaning (scheduled)
+evening    [Biscuit] Pet Quality Time (scheduled)
+night      [Biscuit] Feeding (completed)
+
+
+Pending Tasks Only (filter by status)
+
+[Biscuit] Feeding (pending)
+
+
+Biscuit's Tasks Only (filter by pet name)
+
+Pet Quality Time - evening (scheduled)
+Feeding - night (completed)
+Feeding - morning (scheduled)
+Feeding - morning (pending)
+
+
+Completing Breakfast (a DAILY task)
+
+Before: Breakfast - due 2026-07-06, status=scheduled
+After:  Breakfast - due 2026-07-06, status=completed
+New occurrence: Breakfast - due 2026-07-07, status=pending
+Biscuit now has 5 tasks (was 4 before completing).
+```
 
 # Testing PawPal+
 command to run tests: `python -m pytest`
