@@ -211,3 +211,111 @@ def test_filter_tasks_by_pet_name_is_case_insensitive():
     result = scheduler.filter_tasks([dog_task, cat_task], pet_name="biscuit")
 
     assert result == [dog_task]
+
+
+# --- Recurrence: month-end clamping edge cases ---
+
+
+def test_complete_monthly_task_clamps_to_leap_year_february():
+    pet = Pet(pet_id="P1", name="Biscuit", species="dog", age=4)
+    task = _make_feeding_task(frequency=Frequency.MONTHLY, due_date=date(2024, 1, 31))
+    pet.add_task(task)
+
+    next_task = task.complete()
+
+    # 2024 is a leap year, so Jan 31 -> Feb clamps to the 29th, not the 28th.
+    assert next_task.due_date == date(2024, 2, 29)
+
+
+def test_complete_monthly_task_rolls_over_to_next_year():
+    pet = Pet(pet_id="P1", name="Biscuit", species="dog", age=4)
+    task = _make_feeding_task(frequency=Frequency.MONTHLY, due_date=date(2026, 12, 31))
+    pet.add_task(task)
+
+    next_task = task.complete()
+
+    # December -> January must also roll the year forward.
+    assert next_task.due_date == date(2027, 1, 31)
+
+
+def test_complete_monthly_task_clamps_to_30_day_month():
+    pet = Pet(pet_id="P1", name="Biscuit", species="dog", age=4)
+    task = _make_feeding_task(frequency=Frequency.MONTHLY, due_date=date(2026, 8, 31))
+    pet.add_task(task)
+
+    next_task = task.complete()
+
+    # August has 31 days but September only has 30, so it clamps down.
+    assert next_task.due_date == date(2026, 9, 30)
+
+
+# --- Conflict detection: exact-duplicate and back-to-back edge cases ---
+
+
+def test_detect_conflicts_flags_tasks_scheduled_at_the_exact_same_time():
+    # Two tasks with identical time period and duration are a duplicate-time
+    # conflict, not just a partial overlap.
+    first = _make_feeding_task(time="morning", duration_minutes=30)
+    second = _make_feeding_task(time="morning", duration_minutes=30)
+
+    scheduler = Scheduler(available_minutes=120)
+    conflicts = scheduler.detect_conflicts([first, second])
+
+    assert conflicts == [(first, second)]
+
+
+def test_detect_conflicts_does_not_flag_back_to_back_tasks():
+    # first runs 8:00-8:30 (morning); second is manually scheduled to start
+    # exactly when first ends. Touching endpoints should NOT count as an
+    # overlap since _intervals_overlap uses a strict "<" comparison.
+    first = _make_feeding_task(time="morning", duration_minutes=30)
+    second = _make_feeding_task(time="morning", duration_minutes=30)
+    first.schedule()
+    second.scheduled_at = first.ends_at
+
+    scheduler = Scheduler(available_minutes=120)
+    conflicts = scheduler.detect_conflicts([first, second])
+
+    assert conflicts == []
+
+
+# --- Sorting correctness: stability and priority-vs-overdue ranking ---
+
+
+def test_sort_by_time_preserves_original_order_for_tasks_with_same_time():
+    # sorted() is stable, so two tasks with an identical time period must
+    # keep their original relative order rather than being reordered.
+    first = _make_feeding_task(time="morning", priority=Priority.LOW)
+    second = _make_feeding_task(time="morning", priority=Priority.HIGH)
+
+    scheduler = Scheduler(available_minutes=120)
+    ordered = scheduler.sort_by_time([first, second])
+
+    assert ordered == [first, second]
+
+
+def test_build_schedule_prioritizes_overdue_task_over_higher_priority_task():
+    # An overdue LOW priority task must be scheduled ahead of a HIGH priority
+    # task that's merely due today -- overdue status outranks priority in
+    # Scheduler._sort_key's ordering.
+    owner = Owner(owner_id="O1", name="Roy Moon", email="roy@example.com")
+    pet = Pet(pet_id="P1", name="Biscuit", species="dog", age=4)
+    owner.add_pet(pet)
+
+    yesterday = date.today() - timedelta(days=1)
+    overdue_low = _make_feeding_task(
+        time="morning", duration_minutes=15, priority=Priority.LOW, due_date=yesterday
+    )
+    due_today_high = _make_feeding_task(
+        time="evening", duration_minutes=15, priority=Priority.HIGH
+    )
+    pet.add_task(overdue_low)
+    pet.add_task(due_today_high)
+
+    scheduler = Scheduler(available_minutes=15)
+    schedule = scheduler.build_schedule(owner)
+
+    # Only one task fits in the 15-minute budget; the overdue one wins even
+    # though it has lower priority.
+    assert schedule == [overdue_low]
+    assert scheduler.last_skipped_over_budget == [due_today_high]

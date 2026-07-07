@@ -107,3 +107,58 @@ Describe your app in numbered steps so a reader can follow along without watchin
 5. <!-- Add more steps as needed -->
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+
+# Testing PawPal+
+command to run tests: `python -m pytest`
+
+**Recurrence logic**
+- Completing a daily/weekly task creates the next occurrence exactly 1 day/week later; a `ONCE` task creates no successor.
+- Monthly recurrence correctly clamps to the last valid day of the next month (Jan 31→Feb 28, and the leap-year case Jan 31→Feb 29), handles 31-day→30-day rollovers (Aug 31→Sep 30), and rolls the year over at December→January.
+
+**Conflict detection**
+- Flags overlapping tasks whether they belong to the same pet or different pets (the owner can only do one task at a time).
+- Flags two tasks scheduled at the exact same time as a duplicate-time conflict.
+- Does not flag back-to-back tasks that touch at the boundary (one ends exactly when the next starts) — confirms the overlap check is a strict inequality, not inclusive.
+- Ignores genuinely non-overlapping tasks.
+
+**Sorting correctness**
+- Orders tasks chronologically by time-of-day period (morning → afternoon → evening → night).
+- Preserves original relative order for tasks with identical time slots (sort stability).
+- Confirms overdue status outranks priority when building a schedule — an overdue low-priority task is scheduled ahead of a same-day high-priority one.
+
+**Supporting coverage**
+- Task status transitions on `complete()`, pet/task registration, budget-based schedule building (including skipping tasks that don't fit or that conflict), and status/pet-name filtering (case-insensitive).
+
+### Test run output
+
+```
+tests/test_pawpal.py::test_complete_changes_task_status PASSED                                            [  4%]
+tests/test_pawpal.py::test_complete_once_task_returns_none_and_creates_no_new_task PASSED                 [  9%]
+tests/test_pawpal.py::test_complete_daily_task_creates_next_occurrence_one_day_later PASSED               [ 14%]
+tests/test_pawpal.py::test_complete_weekly_task_creates_next_occurrence_one_week_later PASSED             [ 19%]
+tests/test_pawpal.py::test_complete_monthly_task_creates_next_occurrence_next_month PASSED                [ 23%]
+tests/test_pawpal.py::test_add_task_increases_pet_task_count PASSED                                       [ 28%]
+tests/test_pawpal.py::test_build_schedule_skips_overlapping_task_for_same_pet PASSED                      [ 33%]
+tests/test_pawpal.py::test_build_schedule_detects_overlap_across_different_pets PASSED                    [ 38%]
+tests/test_pawpal.py::test_detect_conflicts_finds_overlap_for_same_pet PASSED                             [ 42%]
+tests/test_pawpal.py::test_detect_conflicts_finds_overlap_across_different_pets PASSED                    [ 47%]
+tests/test_pawpal.py::test_detect_conflicts_ignores_non_overlapping_tasks PASSED                          [ 52%]
+tests/test_pawpal.py::test_sort_by_time_orders_tasks_chronologically PASSED                               [ 57%]
+tests/test_pawpal.py::test_filter_tasks_by_status PASSED                                                  [ 61%]
+tests/test_pawpal.py::test_filter_tasks_by_pet_name_is_case_insensitive PASSED                             [ 66%]
+tests/test_pawpal.py::test_complete_monthly_task_clamps_to_leap_year_february PASSED                      [ 71%]
+tests/test_pawpal.py::test_complete_monthly_task_rolls_over_to_next_year PASSED                           [ 76%]
+tests/test_pawpal.py::test_complete_monthly_task_clamps_to_30_day_month PASSED                            [ 80%]
+tests/test_pawpal.py::test_detect_conflicts_flags_tasks_scheduled_at_the_exact_same_time PASSED           [ 85%]
+tests/test_pawpal.py::test_detect_conflicts_does_not_flag_back_to_back_tasks PASSED                       [ 90%]
+tests/test_pawpal.py::test_sort_by_time_preserves_original_order_for_tasks_with_same_time PASSED          [ 95%]
+tests/test_pawpal.py::test_build_schedule_prioritizes_overdue_task_over_higher_priority_task PASSED       [100%]
+
+========================================================================== 21 passed in 0.02s ==========================================================================
+```
+
+### Confidence Level
+
+⭐⭐⭐⭐☆ (4/5)
+
+All 21 tests pass, covering the core recurrence, conflict-detection, and sorting logic plus several boundary cases (month-end clamping, leap years, touching-endpoint conflicts, overdue-vs-priority ranking). One star held back because the UI layer (`app.py`) and multi-pet/multi-owner scale scenarios aren't covered by automated tests — those have only been checked manually.
